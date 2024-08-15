@@ -231,7 +231,11 @@ func TestClient(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to marshal request body: %v", err)
 		}
-		resp, err := jsonapi.Raw(ctx, http.MethodPost, "/items/post/ok", bytes.NewReader(bodyBytes), opts...)
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, "/items/post/ok", bytes.NewReader(bodyBytes))
+		if err != nil {
+			t.Fatalf("failed to create request: %v", err)
+		}
+		resp, err := jsonapi.Raw(req, opts...)
 		if err != nil {
 			t.Fatalf("expected no error, got %q", err)
 		}

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"time"
 )
 
@@ -16,7 +15,6 @@ type Doer interface {
 }
 
 type Config struct {
-	URL        *url.URL
 	Client     Doer
 	Middleware []Middleware
 }
@@ -62,13 +60,8 @@ func WithMiddleware(middleware ...Middleware) Opt {
 // See WithTimeout, WithClient, and WithMiddleware.
 type Opt func(*Config) (err error)
 
-func newConfig(u string, opts ...Opt) (*Config, error) {
-	pu, err := url.Parse(u)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse URL: %w", err)
-	}
+func newConfig(opts ...Opt) (*Config, error) {
 	c := &Config{
-		URL:    pu,
 		Client: http.DefaultClient,
 		Middleware: []Middleware{
 			&requestHeaderMiddleware{"Content-Type", "application/json"},
@@ -92,14 +85,10 @@ func Post[TReq, TResp any](ctx context.Context, url string, request TReq, opts .
 	return doRequestResponse[TReq, TResp](ctx, http.MethodPost, url, request, opts...)
 }
 
-func Raw(ctx context.Context, method, url string, body io.Reader, opts ...Opt) (res *http.Response, err error) {
-	config, err := newConfig(url, opts...)
+func Raw(req *http.Request, opts ...Opt) (res *http.Response, err error) {
+	config, err := newConfig(opts...)
 	if err != nil {
 		return res, fmt.Errorf("failed to create config: %w", err)
-	}
-	req, err := http.NewRequestWithContext(ctx, method, url, body)
-	if err != nil {
-		return res, fmt.Errorf("failed to create request: %w", err)
 	}
 	for _, m := range config.Middleware {
 		if err := m.Request(req); err != nil {
@@ -123,17 +112,25 @@ func doRequestResponse[TReq, TResp any](ctx context.Context, method, url string,
 	if err != nil {
 		return response, fmt.Errorf("failed to marshal request: %w", err)
 	}
-	res, err := Raw(ctx, method, url, bytes.NewReader(buf), opts...)
+	req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(buf))
+	if err != nil {
+		return response, fmt.Errorf("failed to create request: %w", err)
+	}
+	resp, err := Raw(req, opts...)
 	if err != nil {
 		return response, err
 	}
-	return decodeResponse[TResp](res)
+	return decodeResponse[TResp](resp)
 }
 
 // Get a HTTP response from the given URL.
 // Returns ok=false if the response was a 404.
 func Get[TResp any](ctx context.Context, url string, opts ...Opt) (response TResp, ok bool, err error) {
-	res, err := Raw(ctx, http.MethodGet, url, nil, opts...)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return response, false, fmt.Errorf("failed to create request: %w", err)
+	}
+	res, err := Raw(req, opts...)
 	if err != nil {
 		return response, false, err
 	}
