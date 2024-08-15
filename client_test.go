@@ -31,9 +31,29 @@ func createTestRoutes() *http.ServeMux {
 	routes.HandleFunc("/items/get/500", func(w http.ResponseWriter, r *http.Request) {
 		respond.WithError(w, "Internal server error", http.StatusInternalServerError)
 	})
+	routes.HandleFunc("/items/put/ok", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Content-Type") != "application/json" {
+			respond.WithError(w, "Expected application/json content type", http.StatusBadRequest)
+			return
+		}
+		if r.Method != http.MethodPut {
+			respond.WithError(w, "Expected PUT method", http.StatusBadRequest)
+			return
+		}
+		var m map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
+			respond.WithError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		respond.WithJSON(w, m, http.StatusCreated)
+	})
 	routes.HandleFunc("/items/post/ok", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Content-Type") != "application/json" {
 			respond.WithError(w, "Expected application/json content type", http.StatusBadRequest)
+			return
+		}
+		if r.Method != http.MethodPost {
+			respond.WithError(w, "Expected POST method", http.StatusBadRequest)
 			return
 		}
 		var m map[string]any
@@ -128,6 +148,16 @@ func TestClient(t *testing.T) {
 		}
 		if ok {
 			t.Error("expected ok to be false")
+		}
+	})
+	t.Run("/items/put/ok", func(t *testing.T) {
+		m := map[string]any{"key": "value"}
+		resp, err := jsonapi.Put[map[string]any, map[string]any](ctx, "/items/put/ok", m, opts...)
+		if err != nil {
+			t.Fatalf("expected no error, got %q", err)
+		}
+		if diff := cmp.Diff(m, resp); diff != "" {
+			t.Error(diff)
 		}
 	})
 	t.Run("/items/post/ok", func(t *testing.T) {

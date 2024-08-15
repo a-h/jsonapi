@@ -82,8 +82,17 @@ func newConfig(u string, opts ...Opt) (*Config, error) {
 	return c, nil
 }
 
+// Put a HTTP request to the given URL with the given request body.
+func Put[TReq, TResp any](ctx context.Context, url string, request TReq, opts ...Opt) (response TResp, err error) {
+	return doRequestResponse[TReq, TResp](ctx, http.MethodPut, url, request, opts...)
+}
+
 // Post a HTTP request to the given URL with the given request body.
 func Post[TReq, TResp any](ctx context.Context, url string, request TReq, opts ...Opt) (response TResp, err error) {
+	return doRequestResponse[TReq, TResp](ctx, http.MethodPost, url, request, opts...)
+}
+
+func doRequestResponse[TReq, TResp any](ctx context.Context, method, url string, request TReq, opts ...Opt) (response TResp, err error) {
 	config, err := newConfig(url, opts...)
 	if err != nil {
 		return response, fmt.Errorf("failed to create config: %w", err)
@@ -92,7 +101,7 @@ func Post[TReq, TResp any](ctx context.Context, url string, request TReq, opts .
 	if err != nil {
 		return response, fmt.Errorf("failed to marshal request: %w", err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(buf))
+	req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(buf))
 	if err != nil {
 		return response, fmt.Errorf("failed to create request: %w", err)
 	}
