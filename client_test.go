@@ -1,6 +1,7 @@
 package jsonapi_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -221,6 +222,27 @@ func TestClient(t *testing.T) {
 			t.Fatalf("expected no error, got %q", err)
 		}
 		if diff := cmp.Diff(m, resp); diff != "" {
+			t.Error(diff)
+		}
+	})
+	t.Run("Raw", func(t *testing.T) {
+		m := map[string]any{"key": "value"}
+		bodyBytes, err := json.Marshal(m)
+		if err != nil {
+			t.Fatalf("failed to marshal request body: %v", err)
+		}
+		resp, err := jsonapi.Raw(ctx, http.MethodPost, "/items/post/ok", bytes.NewReader(bodyBytes), opts...)
+		if err != nil {
+			t.Fatalf("expected no error, got %q", err)
+		}
+		if resp.StatusCode != http.StatusCreated {
+			t.Errorf("expected status code %d, got %d", http.StatusCreated, resp.StatusCode)
+		}
+		var respBody map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&respBody); err != nil {
+			t.Fatalf("failed to decode response body: %v", err)
+		}
+		if diff := cmp.Diff(m, respBody); diff != "" {
 			t.Error(diff)
 		}
 	})

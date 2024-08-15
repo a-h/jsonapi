@@ -92,33 +92,62 @@ func Post[TReq, TResp any](ctx context.Context, url string, request TReq, opts .
 	return doRequestResponse[TReq, TResp](ctx, http.MethodPost, url, request, opts...)
 }
 
-func doRequestResponse[TReq, TResp any](ctx context.Context, method, url string, request TReq, opts ...Opt) (response TResp, err error) {
+func Raw(ctx context.Context, method, url string, body io.Reader, opts ...Opt) (res *http.Response, err error) {
 	config, err := newConfig(url, opts...)
 	if err != nil {
-		return response, fmt.Errorf("failed to create config: %w", err)
+		return res, fmt.Errorf("failed to create config: %w", err)
 	}
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	if err != nil {
+		return res, fmt.Errorf("failed to create request: %w", err)
+	}
+	for _, m := range config.Middleware {
+		if err := m.Request(req); err != nil {
+			return res, fmt.Errorf("middleware failed to modify request: %w", err)
+		}
+	}
+	res, err = config.Client.Do(req)
+	if err != nil {
+		return res, fmt.Errorf("failed to perform HTTP request: %w", err)
+	}
+	for _, m := range config.Middleware {
+		if err := m.Response(res); err != nil {
+			return res, fmt.Errorf("middleware failed to modify response: %w", err)
+		}
+	}
+	return res, nil
+}
+
+func doRequestResponse[TReq, TResp any](ctx context.Context, method, url string, request TReq, opts ...Opt) (response TResp, err error) {
 	buf, err := json.Marshal(request)
 	if err != nil {
 		return response, fmt.Errorf("failed to marshal request: %w", err)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(buf))
+	res, err := Raw(ctx, method, url, bytes.NewReader(buf), opts...)
 	if err != nil {
-		return response, fmt.Errorf("failed to create request: %w", err)
+		return response, err
 	}
-	for _, m := range config.Middleware {
-		if err := m.Request(req); err != nil {
-			return response, fmt.Errorf("middleware failed to modify request: %w", err)
-		}
-	}
-	res, err := config.Client.Do(req)
+	return decodeResponse[TResp](res)
+}
+
+// Get a HTTP response from the given URL.
+// Returns ok=false if the response was a 404.
+func Get[TResp any](ctx context.Context, url string, opts ...Opt) (response TResp, ok bool, err error) {
+	res, err := Raw(ctx, http.MethodGet, url, nil, opts...)
 	if err != nil {
-		return response, fmt.Errorf("failed to perform HTTP request: %w", err)
+		return response, false, err
 	}
-	for _, m := range config.Middleware {
-		if err := m.Response(res); err != nil {
-			return response, fmt.Errorf("middleware failed to modify response: %w", err)
-		}
+	if res.StatusCode == http.StatusNotFound {
+		return response, false, nil
 	}
+	response, err = decodeResponse[TResp](res)
+	if err != nil {
+		return response, false, err
+	}
+	return response, true, err
+}
+
+func decodeResponse[TResp any](res *http.Response) (response TResp, err error) {
 	defer res.Body.Close()
 	if res.StatusCode < 200 || res.StatusCode > 299 {
 		body, _ := io.ReadAll(res.Body)
@@ -139,56 +168,6 @@ func doRequestResponse[TReq, TResp any](ctx context.Context, method, url string,
 		}
 	}
 	return response, nil
-}
-
-// Get a HTTP response from the given URL.
-// Returns ok=false if the response was a 404.
-func Get[TResp any](ctx context.Context, url string, opts ...Opt) (response TResp, ok bool, err error) {
-	config, err := newConfig(url, opts...)
-	if err != nil {
-		return response, false, fmt.Errorf("failed to create config: %w", err)
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return response, false, fmt.Errorf("failed to create request: %w", err)
-	}
-	for _, m := range config.Middleware {
-		if err := m.Request(req); err != nil {
-			return response, false, fmt.Errorf("middleware failed to modify request: %w", err)
-		}
-	}
-	res, err := config.Client.Do(req)
-	if err != nil {
-		return response, false, fmt.Errorf("failed to perform HTTP request: %w", err)
-	}
-	defer res.Body.Close()
-	for _, m := range config.Middleware {
-		if err := m.Response(res); err != nil {
-			return response, false, fmt.Errorf("middleware failed to modify response: %w", err)
-		}
-	}
-	if res.StatusCode == http.StatusNotFound {
-		return response, false, nil
-	}
-	if res.StatusCode < 200 || res.StatusCode > 299 {
-		body, _ := io.ReadAll(res.Body)
-		return response, false, InvalidStatusError{
-			Status: res.StatusCode,
-			Body:   string(body),
-		}
-	}
-	bodyBytes, err := io.ReadAll(res.Body)
-	if err != nil {
-		return response, false, fmt.Errorf("failed to read response body: %w", err)
-	}
-	if err := json.Unmarshal(bodyBytes, &response); err != nil {
-		return response, false, InvalidJSONError{
-			Status: res.StatusCode,
-			Body:   string(bodyBytes),
-			Err:    err,
-		}
-	}
-	return response, true, nil
 }
 
 type InvalidStatusError struct {
