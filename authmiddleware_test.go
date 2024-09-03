@@ -166,6 +166,20 @@ func TestAuthMiddleware(t *testing.T) {
 			}
 		})
 	})
+	t.Run("the Bearer prefix is not added twice", func(t *testing.T) {
+		m := newAuthMiddleware(func() (string, error) {
+			return "Bearer " + validToken, nil
+		})
+		m.now = now
+
+		req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
+		if err = m.Request(req); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if req.Header.Get("Authorization") != "Bearer "+validToken {
+			t.Errorf("expected the request to have the token, got %v", req.Header.Get("Authorization"))
+		}
+	})
 }
 
 func TestWithAuthMiddleware(t *testing.T) {
