@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+// WithAuthMiddleware returns an Opt that adds authentication middleware to the client.
+// The tokenFetcher should return the access token to be used in the Authorization header.
 func WithAuthMiddleware(tokenFetcher func() (string, error)) Opt {
 	return func(c *Config) error {
 		c.Middleware = append(c.Middleware, newAuthMiddleware(tokenFetcher))
@@ -50,6 +52,9 @@ func (m *AuthMiddleware) Request(req *http.Request) (err error) {
 		if err != nil {
 			m.token = ""
 			return fmt.Errorf("failed to fetch token: %w", err)
+		}
+		if strings.HasPrefix(m.token, "Bearer ") {
+			m.token = strings.TrimPrefix(m.token, "Bearer ")
 		}
 		m.expires, err = getExpiry(m.token)
 		if err != nil {
