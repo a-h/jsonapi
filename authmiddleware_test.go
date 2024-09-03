@@ -141,20 +141,30 @@ func TestAuthMiddleware(t *testing.T) {
 			t.Errorf("expected the token fetcher to be called once, but it was called %d times", callCount)
 		}
 	})
-	t.Run("proides a token to the request", func(t *testing.T) {
+	t.Run("provides tokens to requests", func(t *testing.T) {
 		m := newAuthMiddleware(func() (string, error) {
 			return validToken, nil
 		})
 		m.now = now
 
-		req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
-
-		if err = m.Request(req); err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
-		if req.Header.Get("Authorization") != "Bearer "+validToken {
-			t.Errorf("expected the request to have the token, got %v", req.Header.Get("Authorization"))
-		}
+		t.Run("first time", func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
+			if err = m.Request(req); err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+			if req.Header.Get("Authorization") != "Bearer "+validToken {
+				t.Errorf("expected the request to have the token, got %v", req.Header.Get("Authorization"))
+			}
+		})
+		t.Run("second time", func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
+			if err = m.Request(req); err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+			if req.Header.Get("Authorization") != "Bearer "+validToken {
+				t.Errorf("expected the request to have the token, got %v", req.Header.Get("Authorization"))
+			}
+		})
 	})
 }
 

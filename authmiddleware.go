@@ -56,8 +56,8 @@ func (m *AuthMiddleware) Request(req *http.Request) (err error) {
 			m.expires = time.Time{}
 			return fmt.Errorf("failed to get expiry: %w", err)
 		}
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", m.token))
 	}
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", m.token))
 	return nil
 }
 
